@@ -1,90 +1,107 @@
 const express = require("express");
 const fs = require("fs");
 const users = require("./MOCK_DATA.json");
+const mongoose = require("mongoose");
 const app = express();
 const PORT = 8000;
+
+// DATABASE CONNECTION
+mongoose
+  .connect("mongodb://localhost:27017/basic-express-app")
+  .then(() => console.log("Database connected successfully"))
+  .catch((err) => console.log("Mongo Error:", err));
 
 // MIDDLEWARES
 app.use(express.urlencoded({ extended: false }));
 
+// SCHEMA
+const userSchema = new mongoose.Schema(
+  {
+    firstName: {
+      type: String,
+      required: true,
+    },
+    lastName: {
+      type: String,
+    },
+    email: {
+      type: String,
+      require: true,
+      unique: true,
+    },
+    jobTitle: {
+      type: String,
+    },
+    gender: {
+      type: String,
+    },
+  },
+  { timestamps: true }
+);
+
+const User = mongoose.model("user", userSchema);
+
 // HANDLERS
 
 // Get all users
-const getAllUser = (req, res) => {
-  return res.status(200).json(users);
+const getAllUser = async (req, res) => {
+  const allDbUsers = await User.find({});
+  return res.status(200).json(allDbUsers);
 };
 
 // Create a user
-const createUser = (req, res) => {
+const createUser = async (req, res) => {
   const user = req.body;
-  const id = users.length + 1;
-  user.id = id;
-  users.push({ ...user });
+  if (!user.firstName || !user.email) {
+    return res.status(400).json({
+      message: "First name and email are required",
+    });
+  }
 
-  fs.writeFile("./MOCK_DATA.json", JSON.stringify(users), (err) => {
-    if (err) {
-      return res.status(500).json({
-        message: "Something went wrong",
-      });
-    }
-  });
+  const result = await User.create(user);
+
+  console.log("Result:", result);
 
   return res.status(201).json({
     message: "User created successfully",
-    id: id,
   });
 };
 
 // Get a user by id
-const getUserById = (req, res) => {
-  const id = Number(req.params.id);
-  const user = users.find((user) => user.id === id);
+const getUserById = async (req, res) => {
+  const id = req.params.id;
+  const user = await User.findById(id);
   return res.status(200).json(user);
 };
 
 // Update a user by id
-const updateUserById = (req, res) => {
-  const id = Number(req.params.id);
-  const userIndex = users.findIndex((user) => user.id === id);
-  if (userIndex === -1) {
-    return res.status(404).json({
-      message: "User not found",
-    });
-  }
-  users[userIndex] = { ...users[userIndex], ...req.body };
-  fs.writeFile("./MOCK_DATA.json", JSON.stringify(users), (err) => {
-    if (err) {
-      return res.status(500).json({
-        message: "Something went wrong",
-      });
-    }
+const updateUserById = async (req, res) => {
+  const id = req.params.id;
+  try {
+    await User.findByIdAndUpdate(id, req.body);
     return res.status(200).json({
       message: "User updated successfully",
-      user: users[userIndex],
     });
-  });
+  } catch (error) {
+    return res.status(400).json({
+      message: "Bad request",
+    });
+  }
 };
 
 // Delete a user by id
-const deleteUserById = (req, res) => {
-  const id = Number(req.params.id);
-  const userIndex = users.findIndex((user) => user.id === id);
-  if (userIndex === -1) {
-    return res.status(404).json({
-      message: "User not found",
-    });
-  }
-  users.splice(userIndex, 1);
-  fs.writeFile("./MOCK_DATA.json", JSON.stringify(users), (err) => {
-    if (err) {
-      return res.status(500).json({
-        message: "Something went wrong",
-      });
-    }
+const deleteUserById = async (req, res) => {
+  const id = req.params.id;
+  try {
+    await User.findByIdAndDelete(id);
     return res.status(200).json({
       message: "User deleted successfully",
     });
-  });
+  } catch (error) {
+    return res.status(400).json({
+      message: "Bad request",
+    });
+  }
 };
 
 // ROUTES
@@ -95,11 +112,15 @@ app.get("/", (req, res) => {
 });
 
 // If request is coming from browser
-app.get("/users", (req, res) => {
+app.get("/users", async (req, res) => {
+  const allDbUsers = await User.find({});
   const html = `
     <ol>
-      ${users
-        .map((user) => `<li>${user.first_name} ${user.last_name}</li>`)
+      ${allDbUsers
+        .map(
+          (user) =>
+            `<li>${user.firstName} ${user?.lastName} | ${user.email}</li>`
+        )
         .join("")}
     </ol>
   `;
